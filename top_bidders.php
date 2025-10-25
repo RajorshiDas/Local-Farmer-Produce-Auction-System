@@ -13,56 +13,38 @@ include 'includes/header.php';
 $database = new Database();
 $db = $database->getConnection();
 
-// First, let's check if we have any buyers at all
-$debug_query = "SELECT COUNT(*) as buyer_count FROM Buyers";
-$debug_stmt = $db->prepare($debug_query);
-$debug_stmt->execute();
-$buyer_debug = $debug_stmt->fetch(PDO::FETCH_ASSOC);
 
-// Check if we have any bids
-$bid_debug_query = "SELECT COUNT(*) as bid_count, COUNT(DISTINCT buyer_id) as bidding_buyers FROM Bids";
-$bid_debug_stmt = $db->prepare($bid_debug_query);
-$bid_debug_stmt->execute();
-$bid_debug = $bid_debug_stmt->fetch(PDO::FETCH_ASSOC);
 
-// Temporarily lower the criteria to show buyers with 1+ auction wins instead of 3+
+// Use the is_winning_bid flag from the database - much simpler and accurate!
 $query = "SELECT b.*, 
           COUNT(DISTINCT bid.bid_id) as total_bids,
-          COUNT(DISTINCT CASE WHEN a.status = 'Closed' AND bid.bid_id = (
-              SELECT MAX(bid2.bid_id) FROM Bids bid2 WHERE bid2.auction_id = a.auction_id
-          ) THEN bid.bid_id END) as auctions_won,
-          COALESCE(SUM(CASE WHEN a.status = 'Closed' AND bid.bid_id = (
-              SELECT MAX(bid3.bid_id) FROM Bids bid3 WHERE bid3.auction_id = a.auction_id
-          ) THEN bid.amount ELSE 0 END), 0) as total_spent,
-          COUNT(DISTINCT a.auction_id) as participated_auctions,
-          ROUND(AVG(bid.amount), 2) as avg_bid_amount,
-          MAX(bid.amount) as highest_bid,
-          (SELECT COUNT(*) FROM Bids b2 WHERE b2.buyer_id = b.buyer_id AND b2.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as recent_bids
+          COUNT(DISTINCT CASE WHEN bid.is_winning_bid = TRUE THEN bid.auction_id END) as auctions_won,
+          COALESCE(SUM(CASE WHEN bid.is_winning_bid = TRUE THEN bid.bid_amount ELSE 0 END), 0) as total_spent,
+          COUNT(DISTINCT bid.auction_id) as participated_auctions,
+          ROUND(AVG(bid.bid_amount), 2) as avg_bid_amount,
+          MAX(bid.bid_amount) as highest_bid,
+          (SELECT COUNT(*) FROM Bids b2 WHERE b2.buyer_id = b.buyer_id AND b2.bid_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)) as recent_bids
           FROM Buyers b
           LEFT JOIN Bids bid ON b.buyer_id = bid.buyer_id
-          LEFT JOIN Auctions a ON bid.auction_id = a.auction_id
           GROUP BY b.buyer_id
-          HAVING auctions_won >= 1
+          HAVING auctions_won >= 3
           ORDER BY auctions_won DESC, total_spent DESC, total_bids DESC, b.created_at ASC";
 
 $stmt = $db->prepare($query);
 $stmt->execute();
 $top_bidders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get all buyers stats for comparison
+// Get all buyers stats for comparison using is_winning_bid flag
 $stats_query = "SELECT 
                 COUNT(DISTINCT b.buyer_id) as total_buyers,
                 COUNT(DISTINCT CASE WHEN wins.auctions_won >= 3 THEN b.buyer_id END) as top_bidders_count,
                 COALESCE(SUM(wins.auctions_won), 0) as total_wins
                 FROM Buyers b
                 LEFT JOIN (
-                    SELECT bid.buyer_id, 
-                           COUNT(DISTINCT CASE WHEN a.status = 'Closed' AND bid.bid_id = (
-                               SELECT MAX(bid2.bid_id) FROM Bids bid2 WHERE bid2.auction_id = a.auction_id
-                           ) THEN bid.bid_id END) as auctions_won
-                    FROM Bids bid
-                    LEFT JOIN Auctions a ON bid.auction_id = a.auction_id
-                    GROUP BY bid.buyer_id
+                    SELECT buyer_id, 
+                           COUNT(CASE WHEN is_winning_bid = TRUE THEN 1 END) as auctions_won
+                    FROM Bids
+                    GROUP BY buyer_id
                 ) wins ON b.buyer_id = wins.buyer_id";
 
 $stats_stmt = $db->prepare($stats_query);
@@ -84,18 +66,9 @@ $general_stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
         </p>
         <div class="alert alert-info d-inline-block mb-3">
             <i class="fas fa-info-circle me-2"></i>
-            <strong>Top Bidder Criteria:</strong> Won 1+ Auctions
+            <strong>Top Bidder Criteria:</strong> Won 3+ Auctions
         </div>
-        
-        <!-- Debug Information -->
-        <div class="alert alert-warning d-inline-block ms-3">
-            <small>
-                <strong>Debug:</strong> 
-                Total Buyers: <?php echo $buyer_debug['buyer_count']; ?> | 
-                Total Bids: <?php echo $bid_debug['bid_count']; ?> | 
-                Bidding Buyers: <?php echo $bid_debug['bidding_buyers']; ?>
-            </small>
-        </div>
+
     </div>
 
     <!-- Statistics Cards -->
@@ -150,21 +123,7 @@ $general_stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
                     <div class="alert alert-info d-inline-block">
                         <strong>How to become a Top Bidder:</strong><br>
                         • Participate in auctions<br>
-                        • Win at least 1 auction
-                    </div>
-                    
-                    <!-- Show all buyers for debugging -->
-                    <div class="alert alert-secondary mt-3">
-                        <strong>All Buyers in System:</strong><br>
-                        <?php 
-                        $all_buyers_query = "SELECT b.name, COUNT(bid.bid_id) as total_bids FROM Buyers b LEFT JOIN Bids bid ON b.buyer_id = bid.buyer_id GROUP BY b.buyer_id";
-                        $all_buyers_stmt = $db->prepare($all_buyers_query);
-                        $all_buyers_stmt->execute();
-                        $all_buyers = $all_buyers_stmt->fetchAll(PDO::FETCH_ASSOC);
-                        foreach ($all_buyers as $buyer) {
-                            echo $buyer['name'] . " (" . $buyer['total_bids'] . " bids), ";
-                        }
-                        ?>
+                        • Win at least 3 auctions
                     </div>
                 </div>
             </div>
