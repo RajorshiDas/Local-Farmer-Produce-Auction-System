@@ -18,8 +18,8 @@ $farmer_id = $_SESSION['user_id'];
 // Get farmer statistics
 $stats_query = "SELECT 
     (SELECT COUNT(*) FROM Products WHERE farmer_id = ?) as total_products,
-    (SELECT COUNT(*) FROM Auctions a JOIN Products p ON a.product_id = p.product_id WHERE p.farmer_id = ? AND a.status = 'Active') as active_auctions,
-    (SELECT COUNT(*) FROM Auctions a JOIN Products p ON a.product_id = p.product_id WHERE p.farmer_id = ? AND a.status = 'Closed') as closed_auctions,
+    (SELECT COUNT(*) FROM Auctions a JOIN Products p ON a.product_id = p.product_id WHERE p.farmer_id = ? AND a.status = 'Active' AND a.start_time <= NOW() AND a.end_time > NOW()) as active_auctions,
+    (SELECT COUNT(*) FROM Auctions a JOIN Products p ON a.product_id = p.product_id WHERE p.farmer_id = ? AND (a.status = 'Closed' OR a.end_time <= NOW())) as closed_auctions,
     (SELECT COALESCE(SUM(amount), 0) FROM Payments pa JOIN Auctions a ON pa.auction_id = a.auction_id JOIN Products p ON a.product_id = p.product_id WHERE p.farmer_id = ? AND pa.status = 'Completed') as total_earnings";
 
 $stats_stmt = $db->prepare($stats_query);
@@ -27,7 +27,14 @@ $stats_stmt->execute([$farmer_id, $farmer_id, $farmer_id, $farmer_id]);
 $stats = $stats_stmt->fetch(PDO::FETCH_ASSOC);
 
 // Get recent products
-$products_query = "SELECT p.*, a.status as auction_status, a.current_highest_bid, a.end_time 
+$products_query = "SELECT p.*, 
+                   CASE 
+                       WHEN a.status = 'Active' AND a.start_time > NOW() THEN 'Upcoming'
+                       WHEN a.status = 'Active' AND a.start_time <= NOW() AND a.end_time > NOW() THEN 'Active'
+                       WHEN a.status = 'Closed' OR a.end_time <= NOW() THEN 'Closed'
+                       ELSE a.status
+                   END as auction_status,
+                   a.current_highest_bid, a.end_time, a.start_time
                    FROM Products p 
                    LEFT JOIN Auctions a ON p.product_id = a.product_id 
                    WHERE p.farmer_id = ? 
@@ -175,11 +182,16 @@ include '../includes/header.php';
                                     <h6 class="mb-1"><?php echo htmlspecialchars($product['product_name']); ?></h6>
                                     <small class="text-muted">
                                         <?php if ($product['auction_status']): ?>
-                                            <span class="badge bg-<?php echo $product['auction_status'] === 'Active' ? 'success' : 'secondary'; ?>">
+                                            <span class="badge bg-<?php 
+                                                echo $product['auction_status'] === 'Active' ? 'success' : 
+                                                    ($product['auction_status'] === 'Upcoming' ? 'warning' : 'secondary'); 
+                                            ?>">
                                                 <?php echo $product['auction_status']; ?>
                                             </span>
-                                            <?php if ($product['current_highest_bid']): ?>
+                                            <?php if ($product['auction_status'] === 'Active' && $product['current_highest_bid']): ?>
                                                 <span class="ms-2">Current: ৳<?php echo number_format($product['current_highest_bid'], 2); ?></span>
+                                            <?php elseif ($product['auction_status'] === 'Upcoming'): ?>
+                                                <span class="ms-2">Starts: <?php echo date('M j, H:i', strtotime($product['start_time'])); ?></span>
                                             <?php endif; ?>
                                         <?php else: ?>
                                             <span class="text-muted">No auction</span>

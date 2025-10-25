@@ -139,6 +139,8 @@ include '../includes/header.php';
                                         <option value="Fruits" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Fruits') ? 'selected' : ''; ?>>Fruits</option>
                                         <option value="Grains" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Grains') ? 'selected' : ''; ?>>Grains</option>
                                         <option value="Dairy" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Dairy') ? 'selected' : ''; ?>>Dairy</option>
+                                        <option value="Meat" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Meat') ? 'selected' : ''; ?>>Meat</option>
+                                        <option value="Eggs" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Eggs') ? 'selected' : ''; ?>>Eggs</option>
                                         <option value="Spices" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Spices') ? 'selected' : ''; ?>>Spices</option>
                                         <option value="Other" <?php echo (isset($_POST['category']) && $_POST['category'] === 'Other') ? 'selected' : ''; ?>>Other</option>
                                     </select>

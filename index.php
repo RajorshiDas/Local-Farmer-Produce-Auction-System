@@ -5,23 +5,68 @@ require_once 'config/session.php';
 $page_title = 'Home - Farmer Auction System';
 include 'includes/header.php';
 
-// Get active auctions for homepage
+// Get search and filter parameters
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$category = isset($_GET['category']) ? $_GET['category'] : '';
+$sort = isset($_GET['sort']) ? $_GET['sort'] : 'end_time';
+
+// Get active auctions for homepage with search and filter
 $database = new Database();
 $db = $database->getConnection();
 
-$query = "SELECT a.*, p.product_name, p.description, p.category, p.weight, p.certification, 
+$query = "SELECT a.*, p.product_name, p.description, p.category, p.weight, p.certification, p.starting_bid,
           f.name as farmer_name, f.farm_location,
-          (SELECT image_path FROM ProductImages WHERE product_id = p.product_id LIMIT 1) as main_image
+          (SELECT image_path FROM ProductImages WHERE product_id = p.product_id LIMIT 1) as main_image,
+          (SELECT COUNT(*) FROM Bids WHERE auction_id = a.auction_id) as bid_count,
+          (SELECT MAX(bid_amount) FROM Bids WHERE auction_id = a.auction_id) as current_bid
           FROM Auctions a 
           JOIN Products p ON a.product_id = p.product_id 
           JOIN Farmers f ON p.farmer_id = f.farmer_id 
-          WHERE a.status = 'Active' AND a.start_time <= NOW() AND a.end_time > NOW()
-          ORDER BY a.end_time ASC 
-          LIMIT 6";
+          WHERE a.status = 'Active' AND a.start_time <= NOW() AND a.end_time > NOW()";
+
+$params = [];
+
+// Add search condition
+if ($search) {
+    $query .= " AND (p.product_name LIKE ? OR p.description LIKE ? OR f.name LIKE ?)";
+    $searchTerm = "%$search%";
+    $params[] = $searchTerm;
+    $params[] = $searchTerm;
+    $params[] = $searchTerm;
+}
+
+// Add category filter
+if ($category) {
+    $query .= " AND p.category = ?";
+    $params[] = $category;
+}
+
+// Add sorting
+switch ($sort) {
+    case 'price_low':
+        $query .= " ORDER BY COALESCE((SELECT MAX(bid_amount) FROM Bids WHERE auction_id = a.auction_id), p.starting_bid) ASC";
+        break;
+    case 'price_high':
+        $query .= " ORDER BY COALESCE((SELECT MAX(bid_amount) FROM Bids WHERE auction_id = a.auction_id), p.starting_bid) DESC";
+        break;
+    case 'bids':
+        $query .= " ORDER BY (SELECT COUNT(*) FROM Bids WHERE auction_id = a.auction_id) DESC";
+        break;
+    default:
+        $query .= " ORDER BY a.end_time ASC";
+}
+
+$query .= " LIMIT 12"; // Show more results with filtering
 
 $stmt = $db->prepare($query);
-$stmt->execute();
+$stmt->execute($params);
 $auctions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get categories for filter
+$categories_query = "SELECT DISTINCT category FROM Products ORDER BY category";
+$categories_stmt = $db->prepare($categories_query);
+$categories_stmt->execute();
+$categories = $categories_stmt->fetchAll(PDO::FETCH_COLUMN);
 ?>
 
 <div class="container mt-4">
@@ -46,11 +91,64 @@ $auctions = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Search and Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="search" class="form-label">Search Products</label>
+                            <input type="text" class="form-control" id="search" name="search" 
+                                   value="<?php echo htmlspecialchars($search); ?>" placeholder="Search products or farmers...">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="category" class="form-label">Category</label>
+                            <select class="form-select" id="category" name="category">
+                                <option value="">All Categories</option>
+                                <?php foreach ($categories as $cat): ?>
+                                    <option value="<?php echo htmlspecialchars($cat); ?>" 
+                                            <?php echo ($category === $cat) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($cat); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="sort" class="form-label">Sort By</label>
+                            <select class="form-select" id="sort" name="sort">
+                                <option value="end_time" <?php echo ($sort === 'end_time') ? 'selected' : ''; ?>>Time Left</option>
+                                <option value="price_low" <?php echo ($sort === 'price_low') ? 'selected' : ''; ?>>Price: Low to High</option>
+                                <option value="price_high" <?php echo ($sort === 'price_high') ? 'selected' : ''; ?>>Price: High to Low</option>
+                                <option value="bids" <?php echo ($sort === 'bids') ? 'selected' : ''; ?>>Most Bids</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-search me-1"></i>Search
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Active Auctions Section -->
     <div class="row">
         <div class="col-12">
             <h2 class="mb-4">
                 <i class="fas fa-gavel me-2"></i>Active Auctions
+                <?php if ($search || $category): ?>
+                    <small class="text-muted">
+                        (<?php echo count($auctions); ?> results
+                        <?php if ($search): ?>for "<?php echo htmlspecialchars($search); ?>"<?php endif; ?>
+                        <?php if ($category): ?>in <?php echo htmlspecialchars($category); ?><?php endif; ?>)
+                    </small>
+                <?php endif; ?>
                 <a href="auctions.php" class="btn btn-outline-success btn-sm float-end">View All</a>
             </h2>
         </div>
@@ -98,7 +196,7 @@ $auctions = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
                                     <small class="text-muted">Current Bid</small><br>
-                                    <span class="h5 text-success current-bid">৳<?php echo number_format($auction['current_highest_bid'], 2); ?></span>
+                                    <span class="h5 text-success current-bid">৳<?php echo number_format($auction['current_bid'] ?: $auction['starting_bid'], 2); ?></span>
                                 </div>
                                 <div class="text-end">
                                     <small class="text-muted">Time Left</small><br>

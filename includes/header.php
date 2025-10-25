@@ -31,6 +31,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/farmer_auction/past_auctions.php">Past Auctions</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/farmer_auction/top_contributors.php">
+                            <i class="fas fa-star me-1"></i>Top Contributors
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/farmer_auction/top_bidders.php">
+                            <i class="fas fa-trophy me-1"></i>Top Bidders
+                        </a>
+                    </li>
                     <?php if (isLoggedIn()): ?>
                         <?php if (isFarmer()): ?>
                             <li class="nav-item">

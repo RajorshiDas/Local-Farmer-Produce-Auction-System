@@ -132,7 +132,17 @@ include '../includes/header.php';
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Category</label>
-                                <input type="text" name="category" class="form-control" value="<?php echo htmlspecialchars($product['category']); ?>" required>
+                                <select class="form-select" name="category" required>
+                                    <option value="">Select Category</option>
+                                    <option value="Vegetables" <?php echo ($product['category'] === 'Vegetables') ? 'selected' : ''; ?>>Vegetables</option>
+                                    <option value="Fruits" <?php echo ($product['category'] === 'Fruits') ? 'selected' : ''; ?>>Fruits</option>
+                                    <option value="Grains" <?php echo ($product['category'] === 'Grains') ? 'selected' : ''; ?>>Grains</option>
+                                    <option value="Dairy" <?php echo ($product['category'] === 'Dairy') ? 'selected' : ''; ?>>Dairy</option>
+                                    <option value="Meat" <?php echo ($product['category'] === 'Meat') ? 'selected' : ''; ?>>Meat</option>
+                                    <option value="Eggs" <?php echo ($product['category'] === 'Eggs') ? 'selected' : ''; ?>>Eggs</option>
+                                    <option value="Spices" <?php echo ($product['category'] === 'Spices') ? 'selected' : ''; ?>>Spices</option>
+                                    <option value="Other" <?php echo ($product['category'] === 'Other') ? 'selected' : ''; ?>>Other</option>
+                                </select>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Weight (kg)</label>
